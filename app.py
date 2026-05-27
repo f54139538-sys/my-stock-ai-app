@@ -86,7 +86,7 @@ if "last_request_time" not in st.session_state:
 # ==========================================
 if st.button("🚀 開始進行即時核心分析"):
     current_time = time.time()
-    if (current_time - st.session_state.last_request_time) < 60:
+    if (current_time - st.session_state.last_request_time) < 30:
         st.error(f"🛑 流量保護觸發！請稍後重試。")
     else:
         st.session_state.last_request_time = current_time
