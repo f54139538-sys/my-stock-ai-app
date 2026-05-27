@@ -7,125 +7,142 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
+import time  # 🌟 新增時間套件，用來計算流量冷卻
 
 # ==========================================
 # 1. 網頁初始化與標題設定
 # ==========================================
 st.set_page_config(page_title="AI 股市分析與自動化系統", layout="wide")
 st.title("📈 終極整合：AI 股市分析與郵件自動化系統")
-st.write("本系統已整合：歷史資料爬蟲、SQLite資料庫儲存、Gemini AI趨勢分析、Gmail一鍵通知。")
 
-# 建立左側邊欄，讓介面更乾淨漂亮
+# ==========================================
+# 2. 側邊欄設定 (模型切換與流量提醒)
+# ==========================================
 with st.sidebar:
     st.header("⚙️ 設定面板")
     stock_id = st.text_input("請輸入股票代碼：", value="2330.TW")
-    st.info("提示：台股請加 .TW (如 2330.TW)，美股直接打代碼 (如 AAPL, NVDA)")
+    
+    st.markdown("---")
+    st.header("🧠 AI 模型選擇")
+    
+    # 建立模型選單字典 (顯示名稱 : 實際 API 呼叫代碼)
+    model_options = {
+        "Gemini 3.5 Flash (最新主力, 限5次/分)": "gemini-3.5-flash",
+        "Gemini 3.1 Flash Lite (流速快, 限15次/分)": "gemini-3.1-flash-lite",
+        "Gemini 2.5 Flash": "gemini-2.5-flash",
+        "Gemini 2.0 Flash (經典款)": "gemini-2.0-flash"
+    }
+    # 建立下拉式選單
+    selected_model_label = st.selectbox("請手動切換您想使用的 AI 模型：", list(model_options.keys()))
+    selected_api_model = model_options[selected_model_label]
+    
+    st.markdown("---")
+    st.warning("⚠️ **流量保護機制已啟動**\n\nGoogle 免費版 API 有嚴格的每分鐘呼叫限制 (RPM)。為保護您的帳號不被鎖定，系統已強制設定**每次分析需間隔 60 秒**。")
 
 # ==========================================
-# 2. 讀取 Streamlit 雲端保險箱的金鑰與信箱資訊
+# 3. 讀取金鑰與初始化記憶池 (Session State)
 # ==========================================
 GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 MY_EMAIL = st.secrets["MY_EMAIL"]
 MY_APP_PASSWORD = st.secrets["MY_APP_PASSWORD"]
 TO_EMAIL = st.secrets["TO_EMAIL"]
 
-# 初始化 Gemini AI 客戶端
 client = genai.Client(api_key=GOOGLE_API_KEY)
 
-# 🌟 初始化網頁記憶池 (Session State)
-# 這樣可以防止網頁重新整理時，AI 報告消失或重複重複發送 API 請求
+# 初始化記憶池
 if "ai_report" not in st.session_state:
     st.session_state.ai_report = None
 if "current_stock" not in st.session_state:
     st.session_state.current_stock = ""
+if "last_request_time" not in st.session_state:
+    st.session_state.last_request_time = 0  # 記錄上次呼叫 API 的時間
 
 # ==========================================
-# 3. 核心邏輯：資料抓取、存庫、AI 分析
+# 4. 核心邏輯：資料抓取、存庫、AI 分析
 # ==========================================
-if st.button("🚀 開始進行核心整併流程（抓取 -> 存庫 -> AI分析）"):
-    st.session_state.current_stock = stock_id
+if st.button("🚀 開始進行核心分析（抓取 -> 存庫 -> AI分析）"):
     
-    # 關卡 A：網路爬蟲抓取資料
-    with st.spinner("🔍 第一步：正在從 Yahoo Finance 抓取最新股價..."):
-        stock = yf.Ticker(stock_id)
-        hist_data = stock.history(period="1mo")
-        
-    if hist_data.empty:
-        st.error("❌ 找不到該股票資料，請檢查代碼是否正確。")
+    # 🌟 流量防護鎖：檢查距離上次請求是否超過 60 秒
+    current_time = time.time()
+    time_elapsed = current_time - st.session_state.last_request_time
+    
+    if time_elapsed < 60:
+        wait_time = int(60 - time_elapsed)
+        st.error(f"🛑 流量保護觸發！請勿頻繁點擊。為保護您的 API 額度，請再等待 **{wait_time} 秒** 後重試。")
     else:
-        st.success("✅ 關卡 A 成功：資料抓取完畢！")
+        # 通過流量檢查，記錄這次的時間
+        st.session_state.last_request_time = current_time
+        st.session_state.current_stock = stock_id
         
-        # 關卡 B：存入與讀取 SQLite 資料庫
-        with st.spinner("📂 第二步：正在將資料寫入本地 SQLite 資料庫..."):
-            conn = sqlite3.connect("stock_data.db")
-            # 存入資料庫
-            hist_data.to_sql("daily_price", conn, if_exists="replace")
-            # 重新從資料庫讀出來（確保資料庫功能完全正常）
-            df_from_db = pd.read_sql("SELECT * FROM daily_price", conn)
-            conn.close()
-        st.success("✅ 關卡 B 成功：本地資料庫寫入與驗證讀取成功！")
-        
-        # 畫出折線圖
-        st.subheader(f"📊 {stock_id} 最近一個月歷史收盤價走勢")
-        st.line_chart(df_from_db.set_index('Date')['Close'])
-        
-        # 關卡 C：將資料餵給 Gemini AI 進行專業分析
-        with st.spinner("🧠 第三步：正在將資料庫數據打包，呼叫 Gemini AI 進行趨勢分析..."):
-            data_text = df_from_db.to_string()
-            prompt = f"""
-            你是一位專業的股市分析師。
-            請根據以下 {stock_id} 最近一個月的歷史股價資料，
-            用簡單易懂的繁體中文，幫我分析近期的股價趨勢，並列出 3 個觀察重點與未來建議。
+        # 關卡 A：網路爬蟲抓取資料
+        with st.spinner("🔍 正在從 Yahoo Finance 抓取最新股價..."):
+            stock = yf.Ticker(stock_id)
+            hist_data = stock.history(period="1mo")
             
-            股票資料如下：
-            {data_text}
-            """
+        if hist_data.empty:
+            st.error("❌ 找不到該股票資料，請檢查代碼是否正確。")
+        else:
+            # 關卡 B：存入與讀取 SQLite 資料庫
+            with st.spinner("📂 正在將資料寫入並讀取本地 SQLite 資料庫..."):
+                conn = sqlite3.connect("stock_data.db")
+                hist_data.to_sql("daily_price", conn, if_exists="replace")
+                df_from_db = pd.read_sql("SELECT * FROM daily_price", conn)
+                conn.close()
             
-            try:
-                # 🌟 換上後台證實有額度的現役主力模型
-                response = client.models.generate_content(
-                    model='gemini-3.5-flash',
-                    contents=prompt
-                )
-                st.session_state.ai_report = response.text
-                st.success("✅ 關卡 C 成功：Gemini 3.5 分析完畢！")
-            except Exception as e:
-                # 同樣更新除錯訊息
-                st.error(f"❌ 【實時回報】目前呼叫 gemini-3.5-flash 失敗。詳細原因：{e}")
+            st.subheader(f"📊 {stock_id} 最近一個月歷史收盤價走勢")
+            st.line_chart(df_from_db.set_index('Date')['Close'])
+            
+            # 關卡 C：呼叫選定的 Gemini AI 進行分析
+            with st.spinner(f"🧠 正在呼叫 {selected_model_label} 進行趨勢分析..."):
+                data_text = df_from_db.to_string()
+                prompt = f"""
+                你是一位專業的股市分析師。
+                請根據以下 {stock_id} 最近一個月的歷史股價資料，
+                用簡單易懂的繁體中文，幫我分析近期的股價趨勢，並列出 3 個觀察重點與未來建議。
+                
+                股票資料如下：
+                {data_text}
+                """
+                
+                try:
+                    # 使用使用者在側邊欄選擇的模型
+                    response = client.models.generate_content(
+                        model=selected_api_model,
+                        contents=prompt
+                    )
+                    # 存入記憶池
+                    st.session_state.ai_report = response.text
+                    st.success("✅ AI 分析完畢！")
+                except Exception as e:
+                    st.error(f"❌ 呼叫 {selected_api_model} 失敗。錯誤原因：{e}")
 
 # ==========================================
-# 4. 渲染/顯示 AI 分析報告
+# 5. 渲染 AI 分析報告與寄信功能
 # ==========================================
-# 如果記憶池裡面有報告，就把他顯示在網頁上
 if st.session_state.ai_report and st.session_state.current_stock == stock_id:
     st.markdown("---")
-    st.subheader("🤖 Gemini AI 專業分析報告")
+    st.subheader(f"🤖 AI 專業分析報告 ({selected_model_label})")
     st.write(st.session_state.ai_report)
     
     st.markdown("---")
     st.subheader("📧 自動化通知中心")
-    st.write(f"點擊下方按鈕，系統會將上方這份 {stock_id} 的分析報告自動寄送到您的信箱 ({TO_EMAIL})。")
     
-    # 關卡 D：一鍵寄送電子報
-    if st.button("✉️ 立即寄送 AI 股市分析日報"):
+    if st.button("✉️ 立即寄送此份股市日報"):
         with st.spinner("📨 正在啟動郵件伺服器，發送郵件中..."):
             try:
-                # 設定信件格式
                 msg = MIMEMultipart()
                 msg['From'] = MY_EMAIL
                 msg['To'] = TO_EMAIL
                 msg['Subject'] = Header(f"🤖 您的專屬 AI 股市日報：{stock_id}", 'utf-8')
                 
-                # 放入記憶池中的報告內容
                 msg.attach(MIMEText(st.session_state.ai_report, 'plain', 'utf-8'))
                 
-                # 連線到 Gmail 伺服器並寄出
                 server = smtplib.SMTP('smtp.gmail.com', 587)
                 server.starttls()
                 server.login(MY_EMAIL, MY_APP_PASSWORD)
                 server.send_message(msg)
                 server.quit()
                 
-                st.success(f"🎉 郵件發送成功！請檢查您的信箱：{TO_EMAIL}")
+                st.success(f"🎉 郵件發送成功！請檢查您的信箱。")
             except Exception as e:
-                st.error(f"❌ 郵件發送失敗。請檢查 Secrets 中的密碼設定。詳細錯誤：{e}")
+                st.error(f"❌ 郵件發送失敗。詳細錯誤：{e}")
