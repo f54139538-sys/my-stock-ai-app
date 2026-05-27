@@ -84,14 +84,14 @@ if st.button("🚀 開始進行核心整併流程（抓取 -> 存庫 -> AI分析
             try:
                 # 這裡確保使用的是 1.5
                 response = client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model='gemini-1.5-flash-latest',
                     contents=prompt
                 )
                 st.session_state.ai_report = response.text
-                st.success("✅ 關卡 C 成功：Gemini 1.5-flash 分析完畢！")
+                st.success("✅ 關卡 C 成功：Gemini 1.5-flash-latest 分析完畢！")
             except Exception as e:
                 # 🌟 修改這裡：把進來測試的模型明確印出來，這樣就不會被舊的錯誤誤導！
-                st.error(f"❌ 【實時回報】目前呼叫 gemini-1.5-flash 失敗。詳細原因：{e}")
+                st.error(f"❌ 【實時回報】目前呼叫 gemini-1.5-flash-latest 失敗。詳細原因：{e}")
 
 # ==========================================
 # 4. 渲染/顯示 AI 分析報告
