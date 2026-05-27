@@ -39,7 +39,7 @@ with st.sidebar:
     st.markdown("---")
     st.header("📝 3. 自訂 AI 分析提示詞")
     default_prompt = f"""你是一位專業的股市分析師。
-請根據以下提供的最近一個月歷史股價資料，用簡單易懂的繁體中文，幫我分析近期的股價趨勢，並列出 3 個觀察重點與未來的具體操作建議。(字數在150字內)"""
+請根據以下提供的最近一個月歷史股價資料，用簡單易懂的繁體中文，幫我分析近期的股價趨勢，並列出 3 個觀察重點與未來的具體操作建議。(自數控制在約300字))"""
     user_prompt = st.text_area("您可以隨時修改給 AI 的指令：", value=default_prompt, height=150)
     
     st.markdown("---")
@@ -82,7 +82,7 @@ if "last_request_time" not in st.session_state:
     st.session_state.last_request_time = 0
 
 # ==========================================
-# 4. 手動即時分析與寄信 (保留與之前相同，此處略縮以聚焦重點)
+# 4. 手動即時分析 (移除了中間干擾的假按鈕區塊)
 # ==========================================
 if st.button("🚀 開始進行即時核心分析"):
     current_time = time.time()
@@ -112,16 +112,6 @@ if st.button("🚀 開始進行即時核心分析"):
                 except Exception as e:
                     st.error(f"❌ 呼叫失敗：{e}")
 
-if st.session_state.ai_report and st.session_state.current_stock == stock_id:
-    st.markdown("---")
-    st.write(st.session_state.ai_report)
-    if st.button("✉️ 手動寄送此報告"):
-        if recipient_email:
-            # 這裡省略發信細節，與前版相同
-            st.success("郵件寄送邏輯執行完畢 (細節略)")
-        else:
-            st.warning("請先輸入收件信箱！")
-
 # ==========================================
 # 5. 儲存排程設定檔按鈕 (完美打包變數)
 # ==========================================
@@ -148,8 +138,9 @@ if schedule_mode != "暫不開啟排程":
             with open("scheduler_config.json", "w", encoding="utf-8") as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=4)
             st.success("🎉 排程設定成功！已同步至本地設定檔。")
+
 # ==========================================
-# 6. 渲染手動分析報告與寄信
+# 6. 渲染手動分析報告與真正的手動寄信按鈕
 # ==========================================
 if st.session_state.ai_report and st.session_state.current_stock == stock_id:
     st.markdown("---")
