@@ -148,3 +148,34 @@ if schedule_mode != "暫不開啟排程":
             with open("scheduler_config.json", "w", encoding="utf-8") as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=4)
             st.success("🎉 排程設定成功！已同步至本地設定檔。")
+# ==========================================
+# 6. 渲染手動分析報告與寄信
+# ==========================================
+if st.session_state.ai_report and st.session_state.current_stock == stock_id:
+    st.markdown("---")
+    st.subheader(f"🤖 AI 專業分析報告 (由 {selected_api_model} 提供)")
+    st.write(st.session_state.ai_report)
+    
+    st.markdown("---")
+    st.subheader("📧 手動通知中心")
+    if st.button("✉️ 手動立即寄送此份股市日報"):
+        if not recipient_email:
+            st.warning("⚠️ 請先在左側邊欄輸入「接收報告的 Email」！")
+        else:
+            with st.spinner(f"📨 正在發送郵件至 {recipient_email} ..."):
+                try:
+                    # 這是真正的寄信邏輯，絕不省略！
+                    msg = MIMEMultipart()
+                    msg['From'] = MY_EMAIL
+                    msg['To'] = recipient_email
+                    msg['Subject'] = Header(f"🤖 您的專屬 AI 股市日報：{stock_id}", 'utf-8')
+                    msg.attach(MIMEText(st.session_state.ai_report, 'plain', 'utf-8'))
+                    
+                    server = smtplib.SMTP('smtp.gmail.com', 587)
+                    server.starttls()
+                    server.login(MY_EMAIL, MY_APP_PASSWORD)
+                    server.send_message(msg)
+                    server.quit()
+                    st.success(f"🎉 郵件發送成功！請去信箱檢查。")
+                except Exception as e:
+                    st.error(f"❌ 郵件發送失敗。詳細錯誤：{e}")
