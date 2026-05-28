@@ -147,19 +147,40 @@ if st.session_state.raw_data is not None and st.session_state.current_stock == s
     latest_date_str = df_db.index[-1].strftime('%Y-%m-%d')
     
     # 頂部儀表板配置 (Top Dashboard Metrics)
+    # 提取最新與前一交易日數據 (Extract current and previous trading day data)
+    latest_row = df_db.iloc[-1]
+    prev_row = df_db.iloc[-2]
+    latest_date_str = df_db.index[-1].strftime('%Y-%m-%d')
+    
+    # 計算漲跌幅 (Calculate Price Change and Percentage)
+    current_close = latest_row['Close']
+    prev_close = prev_row['Close']
+    price_change = current_close - prev_close
+    pct_change = (price_change / prev_close) * 100
+    
+    # 頂部儀表板配置 (Top Dashboard Metrics)
     st.markdown("---")
     st.subheader(f"{stock_id} 市場報價總覽")
-    st.caption(f"Last Update: {latest_date_str}")
+    # 加上貼心提示，讓使用者知道盤中時的收盤價代表什麼
+    st.caption(f"Last Update: {latest_date_str} (若處於交易時段，Close 代表即時現價)")
     
-    col1, col2, col3, col4 = st.columns(4)
+    # 改為 5 個欄位，加入「昨收」與「動態漲跌幅」
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.metric(label="Open / 開盤", value=f"{latest_row['Open']:.2f}")
+        st.metric(label="Prev Close / 昨收", value=f"{prev_close:.2f}")
     with col2:
-        st.metric(label="High / 最高", value=f"{latest_row['High']:.2f}")
+        st.metric(label="Open / 開盤", value=f"{latest_row['Open']:.2f}")
     with col3:
-        st.metric(label="Low / 最低", value=f"{latest_row['Low']:.2f}")
+        st.metric(label="High / 最高", value=f"{latest_row['High']:.2f}")
     with col4:
-        st.metric(label="Close / 收盤", value=f"{latest_row['Close']:.2f}")
+        st.metric(label="Low / 最低", value=f"{latest_row['Low']:.2f}")
+    with col5:
+        # 🌟 這裡使用 delta 參數，Streamlit 會自動幫你標示紅綠色的漲跌幅！
+        st.metric(
+            label="Close / 收盤 (現價)", 
+            value=f"{current_close:.2f}", 
+            delta=f"{price_change:+.2f} ({pct_change:+.2f}%)"
+        )
     
     st.markdown("<br>", unsafe_allow_html=True)
     
