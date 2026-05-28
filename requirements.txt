@@ -1,4 +1,6 @@
 streamlit
 yfinance
-google-genai
 pandas
+google-genai
+plotly
+toml
